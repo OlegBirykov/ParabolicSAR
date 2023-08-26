@@ -47,7 +47,7 @@ function body()
     SetCell(tableId, 1, 3, err);
 
     err = '';
-    local transCount = 0; --****************************************
+    local transCount = 0;
 
     -- найти текущую позицию по инструменту
     nowPos = getNowPos();
@@ -83,9 +83,10 @@ function body()
         transCount = transCount + correctPos(0, 'Mode "Only short", close long position');
     end
 
-    -- найти цену входа
-
     -- проверить правильность профита
+    if (transCount == 0) then
+        transCount = transCount + profitControl();
+    end
 
     -- записать текущие данные в таблицу робота
     putDataToTable(signal);
@@ -93,7 +94,72 @@ function body()
     -- запомнить текущую позицию
     prevPos = nowPos;
 
-    sleep(1000);
+    if (transCount ~= 0) then
+        sleep(3000);
+    else
+        sleep(500);
+    end
+end
+
+----------------------------------------------------------------------------------
+----------------------------------
+----------------------------------------------------------------------------------
+function profitControl()
+    local function fn1(param1, param2) 
+        return param1 == account and param2 == emit;
+    end
+
+    local rows = SearchItems('stop_orders', 0, getNumberOf('stop_orders') - 1, fn1, 'account, sec_code');  
+    local step = tonumber(getParamEx(class, emit, 'SEC_PRICE_STEP').param_value);
+    local entryPrice = roundForStep(getEntryPrice(), step);
+    local profitPrice = entryPrice + sign(nowPos) * profit * step;
+    local profitCorrect = false;  -- нашли или нет нужный профит
+    local count = 0;
+
+    if (rows ~= nil) then
+        for i = 1, #rows do
+            local row = getItem('stop_orders', i);
+            local flag = bit.band(row.flags, 0x1);  -- флаг активной заявки
+            if (flag ~= 0) then
+                if (row.stop_order_type ~= 6 or profitCorrect) then -- 6 - тейк-профит
+                    deleteProfit(row.orderNumber);
+                    count = count + 1;
+                else
+                    local quantityX = row.qty;
+                    local profitPriceX = row.condition_price;
+                    local signPosX = 0;
+                    if (row.condition == 4) then
+                        signPosX = -1;
+                    elseif (row.condition == 5)
+                        signPosX = 1;
+                    end
+
+                    if (signPosX == sign(nowPos) and quantityX == math.abs(nowPos) and profitPriceX == profitPrice) then
+                        profitCorrect = true;
+                    else
+                        deleteProfit(row.orderNumber);
+                        count = count + 1;    
+                    end
+                end
+            end
+        end
+    end
+
+    if (not profitCorrect and nowPos ~= 0) then
+        local profitSpread = 30 * step;
+        local buySell = '';
+
+        if (nowPos > 0) then
+            buySell = 'S';
+        else
+            buySell = 'B';
+        end
+
+        newStopProfit(buySell, math.abs(nowPos), profitPrice, 0, profitSpread, 'Create stop order');
+        count = count + 1;
+    end
+
+    return count;
 end
 
 ----------------------------------------------------------------------------------
