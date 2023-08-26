@@ -68,12 +68,12 @@ function body()
     end
 
     -- если сигнал лонг или шорт, то купить или продать
-    if (math.abs(signal == 2)) then
+    if (math.abs(signal) == 2) then
         local needPos = sign(signal) * lot;
         -- такая конструкция автоматически положит програаму, если correctPos вернёт nil
         transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
     -- принудительное закрытие позиции, противоречащей текущему состоянию индикатора
-    elseif (math.abs(signal == 1) and sign(signal) ~= sign(nowPos)) then
+    elseif (math.abs(signal) == 1 and sign(signal) ~= sign(nowPos)) then
         transCount = transCount + correctPos(0, 'Incorrect sign of current position, close position');
     -- принудительное закрытие шорта в режиме "Только лонг"
     elseif (tradeType == 'LONG' and nowPos < 0) then
