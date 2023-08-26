@@ -47,30 +47,48 @@ function body()
     SetCell(tableId, 1, 3, err);
 
     err = '';
+    local transCount = 0; --****************************************
 
     -- найти текущую позицию по инструменту
     nowPos = getNowPos();
 
     -- если переворот или закрытие позиции, убрать профит
     if (nowPos == 0 or sign(nowPos) ~= sign(prevPos)) then
-        deleteAllProfits('Remove take profit');
+        transCount = transCount + deleteAllProfits('Remove take profit');
     end
 
     -- проверить наличие сигнала с графика
     local signal = signalCheck();
 
-    -- скорректировать сигнал с учётом "только лонг" или "только шорт"
+    -- скорректировать сигнал с учётом "Только лонг" или "Только шорт"
+    if (tradeType == 'LONG') then
+        signal = math.max(signal, 0);
+    elseif (tradeType == 'SHORT') then 
+        signal = math.min(signal, 0);
+    end
 
     -- если сигнал лонг или шорт, то купить или продать
-
-    -- проверить, что мы не против показания индикатора
+    if (math.abs(signal == 2)) then
+        local needPos = sign(signal) * lot;
+        -- такая конструкция автоматически положит програаму, если correctPos вернёт nil
+        transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
+    -- принудительное закрытие позиции, противоречащей текущему состоянию индикатора
+    elseif (math.abs(signal == 1) and sign(signal) ~= sign(nowPos)) then
+        transCount = transCount + correctPos(0, 'Incorrect sign of current position, close position');
+    -- принудительное закрытие шорта в режиме "Только лонг"
+    elseif (tradeType == 'LONG' and nowPos < 0) then
+        transCount = transCount + correctPos(0, 'Mode "Only long", close short position');
+    -- принудительное закрытие лонга в режиме "Только шорт"
+    elseif (tradeType == 'SHORT' and nowPos > 0) then
+        transCount = transCount + correctPos(0, 'Mode "Only short", close long position');
+    end
 
     -- найти цену входа
 
     -- проверить правильность профита
 
     -- записать текущие данные в таблицу робота
-    putDataToTable(nowPos);
+    putDataToTable(signal);
 
     -- запомнить текущую позицию
     prevPos = nowPos;
@@ -299,8 +317,14 @@ end
 ----------------------------------------------------------------------------------
 ----------------------------------
 ----------------------------------------------------------------------------------
-function putDataToTable(pos)
-    SetCell(tableId, 3, 2, tostring(pos));
+function putDataToTable(signal)
+    SetCell(tableId, 2, 2, tostring(emit));
+    SetCell(tableId, 3, 2, tostring(nowPos));
+    SetCell(tableId, 4, 2, tostring(signal));
+    SetCell(tableId, 5, 2, tostring(lot));
+    SetCell(tableId, 7, 2, account);
+    SetCell(tableId, 8, 2, class);
+    SetCell(tableId, 9, 2, tradeType);
 end
 
 ----------------------------------------------------------------------------------
@@ -335,12 +359,13 @@ function putDataToTableInit()
     end
 
     SetCell(tableId, 1, 1, 'Server time');
-    SetCell(tableId, 2, 1, 'Код бумаги');
+    SetCell(tableId, 2, 1, 'Emitent code');
     SetCell(tableId, 3, 1, 'Current position');
-    SetCell(tableId, 4, 1, 'Сигнал ТС');
-    SetCell(tableId, 5, 1, 'Лот');
-    SetCell(tableId, 7, 1, 'Номер счёта'); SetCell(tableId, 7, 3, 'Номер счёта на ФОРТС');
-    SetCell(tableId, 8, 1, 'Код класса');
+    SetCell(tableId, 4, 1, 'Signal');
+    SetCell(tableId, 5, 1, 'Lot size');
+    SetCell(tableId, 7, 1, 'Client code');
+    SetCell(tableId, 8, 1, 'Class code');
+    SetCell(tableId, 9, 1, 'Trade type');
     SetCell(tableId, 13, 1, 'Test');
     SetColor(tableId, 13, 1, RGB(220, 220, 0), RGB(0, 0, 0), RGB(0, 220, 220), RGB(0, 0, 0));
     SetCell(tableId, 13, 3, 'Stop');
