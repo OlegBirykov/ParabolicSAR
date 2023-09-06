@@ -2,6 +2,7 @@
 -------------------------- Тело основного цикла скрипта --------------------------
 ----------------------------------------------------------------------------------
 function body() 
+    -- пока работает таймер, выводить в таблицу сообщение об ошибке и не делать больше ничего
     if (timer > 0) then
         timer = timer - 1;
         putDataToTableTimer();
@@ -9,20 +10,23 @@ function body()
         return;
     end
 
+    -- если не удаётся определить время сервера, вывести сообщение об отсутствии связи и ждать 3 секунды
     local serverTime = getInfoParam('SERVERTIME');
     if (serverTime == nil or serverTime == '') then
-        err = 'undefined (no connect)';
+        err = 'No connect';
         timer = 3;
         return;
     else
         err = '';
     end
 
+    -- если пользователь вручную закрыл окно таблицы, открыть таблицу заново
     if (IsWindowClosed(tableId)) then
         CreateWindow(tableId);    
         putDataToTableInit();    
     end
 
+    -- если торговая сессия остановлена, вывести сообщение и ждать 3 секунды 
     local sessionStatus = tonumber(getParamEx(class, emit, 'STATUS').param_value);
     if (sessionStatus ~= 1) then 
         err = 'Session closed';
@@ -30,30 +34,38 @@ function body()
         return;
     end    
 
+    -- обработчик событий таблицы
     local onTableEvent = function(tableId, msg, row, col)
+        -- двойной щелчок левой кнопкой мыши
         if (msg == QTABLE_LBUTTONDBLCLK) then
+            -- ячейка строка 13 столбец 1 - вывести тестовое сообщение
             if (row == 13 and col == 1) then
                 message('Test message');
             end
+            -- ячейка строка 13 столбец 3 - остановить робота
             if (row == 13 and col == 3) then
                 isRun = false;
             end
         end
     end
 
+    -- установить обработчик событий таблицы
     SetTableNotificationCallback(tableId, onTableEvent);
 
+    -- если дошли досюда, сбросить сообщение об ошибке и вывести время сервера
+    err = '';
     SetCell(tableId, 1, 2, serverTime);
     SetCell(tableId, 1, 3, err);
 
-    err = '';
+    -- счётчик транзакций
     local transCount = 0;
 
     -- найти текущую позицию по инструменту
     nowPos = getNowPos();
 
-    -- если переворот или закрытие позиции, убрать профит
+    -- если переворот или закрытие позиции, убрать прежние профиты
     if (nowPos == 0 or sign(nowPos) ~= sign(prevPos)) then
+        -- здесь и далее такая конструкция автоматически положит програаму, если функция вернёт nil
         transCount = transCount + deleteAllProfits('Remove take profit');
     end
 
@@ -70,7 +82,6 @@ function body()
     -- если сигнал лонг или шорт, то купить или продать
     if (math.abs(signal) == 2) then
         local needPos = sign(signal) * lot;
-        -- такая конструкция автоматически положит програаму, если correctPos вернёт nil
         transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
     -- принудительное закрытие позиции, противоречащей текущему состоянию индикатора
     elseif (math.abs(signal) == 1 and sign(signal) ~= sign(nowPos)) then
@@ -130,7 +141,7 @@ function profitControl()
                     local signPosX = 0;
                     if (row.condition == 4) then
                         signPosX = -1;
-                    elseif (row.condition == 5)
+                    elseif (row.condition == 5) then
                         signPosX = 1;
                     end
 
@@ -383,19 +394,6 @@ end
 ----------------------------------------------------------------------------------
 ----------------------------------
 ----------------------------------------------------------------------------------
-function putDataToTable(signal)
-    SetCell(tableId, 2, 2, tostring(emit));
-    SetCell(tableId, 3, 2, tostring(nowPos));
-    SetCell(tableId, 4, 2, tostring(signal));
-    SetCell(tableId, 5, 2, tostring(lot));
-    SetCell(tableId, 7, 2, account);
-    SetCell(tableId, 8, 2, class);
-    SetCell(tableId, 9, 2, tradeType);
-end
-
-----------------------------------------------------------------------------------
-----------------------------------
-----------------------------------------------------------------------------------
 function getNowPos()
     local nSize = getNumberOf('futures_client_holding');
     if (nSize == nil) then
@@ -448,16 +446,28 @@ function putDataToTableInit()
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+---------------------
 ----------------------------------------------------------------------------------
 function putDataToTableTimer()
     SetCell(tableId, 1, 3, err);
     Highlight(tableId, 1, QTABLE_NO_INDEX, RGB(0, 20, 255), RGB(255, 255, 255), 500);
 end
 
-
 ----------------------------------------------------------------------------------
 ----------------------------------
+----------------------------------------------------------------------------------
+function putDataToTable(signal)
+    SetCell(tableId, 2, 2, tostring(emit));
+    SetCell(tableId, 3, 2, tostring(nowPos));
+    SetCell(tableId, 4, 2, tostring(signal));
+    SetCell(tableId, 5, 2, tostring(lot));
+    SetCell(tableId, 7, 2, account);
+    SetCell(tableId, 8, 2, class);
+    SetCell(tableId, 9, 2, tradeType);
+end
+
+----------------------------------------------------------------------------------
+---------------------- Запись строки в конец файла журнала -----------------------
 ----------------------------------------------------------------------------------
 function writeToLogFile(sDataString)
     local serverTime = getInfoParam('SERVERTIME');

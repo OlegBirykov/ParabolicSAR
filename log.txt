@@ -1,12 +1,1 @@
-17.08.2023 12:06:07 - Program started
-17.08.2023 12:07:32 - test: Transaction response =  Неправильно указана цена: ",,,,,,,"
-Сообщение об ошибке: Число не может содержать знак разделителя дробной части; Pos = -1; SECCODE = SiU3; OPERATION = B; QUANTITY = 1; ACCOUNT = A728crz; ACTION = NEW_ORDER; CLASSCODE = SPBFUT; PRICE = ,,,,,,,; CLIENT_CODE = ROBOT; TYPE = L; TRANS_ID = 123456; 
-17.08.2023 12:07:58 - Trade completed in 25200ms
-17.08.2023 12:12:58 - Program started
-17.08.2023 12:13:12 - test: Transaction response =  Неправильно указана цена: "93204,0"
-Сообщение об ошибке: Число не может содержать знак разделителя дробной части; Pos = 1; QUANTITY = 1; TRANS_ID = 123456; SECCODE = SiU3; OPERATION = S; ACCOUNT = A728crz; CLASSCODE = SPBFUT; ACTION = NEW_ORDER; CLIENT_CODE = ROBOT; TYPE = L; PRICE = 93204,0; 
-17.08.2023 12:13:31 - Trade completed in 17700ms
-17.08.2023 12:26:59 - Program started
-17.08.2023 12:27:22 - test: Transaction response = ; Pos = -1; CLIENT_CODE = ROBOT; OPERATION = B; CLASSCODE = SPBFUT; SECCODE = SiU3; ACCOUNT = A728crz; TYPE = L; PRICE = 92640; QUANTITY = 1; ACTION = NEW_ORDER; TRANS_ID = 123456; 
-17.08.2023 12:27:22 - Trade completed in 200ms
-17.08.2023 12:28:54 - Program stopped
+06.09.2023 12:28:21 - Program stopped

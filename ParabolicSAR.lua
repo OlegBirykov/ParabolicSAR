@@ -7,26 +7,28 @@ dofile(getScriptPath() .. '\\library.lua');
 
 logFileName = getScriptPath() .. '\\log.txt';   -- имя файла журнала
 isRun = true;                                   -- работает основной цикл скрипта
-timer = 3;                                  
-err = '';
-slip = 30;
+timer = 3;                                      -- обратный счётчик таймера в секундах                                  
+err = '';                                       -- сообщение об ошибке
+slip = 30;                                      -- проскальзывание в шагах цены
 nowPos = 0;                                     -- текущая позиция по инструменту
 prevPos = 0;                                    -- позиция на предыдущем шаге
 
 class = 'SPBFUT';                               -- срочный рынок
-emit = 'SiU3';                                  -- код бумаги
+emit = 'SiZ3';                                  -- код бумаги
 account = 'A728crz';                            -- код клиента
 sarId = 'SAR';                                  -- id графика Parabolic SAR
 priceId = 'PRICE_SAR';                          -- id графика цены
 lot = 1;                                        -- размер позиции в лотах
-tradeType = REVERSE;                            -- тип торговли: REVERSE/LONG/SHORT
+tradeType = 'REVERSE';                          -- тип торговли: REVERSE/LONG/SHORT
 profit = 50;                                    -- в шагах цены
 
 ----------------------------------------------------------------------------------
 --------------------------------- Запуск робота ----------------------------------
 ----------------------------------------------------------------------------------
 function OnInit()
-    tableId = AllocTable();
+    -- создать и инициализировать таблицу
+    tableId = AllocTable(); -- первое упоминание переменной в любом месте без ключевого слова local 
+                            -- делает её глобальной
     AddColumn(tableId, 1, 'PARAMETER', true, QTABLE_STRING_TYPE, 20);
     AddColumn(tableId, 2, 'VALUE', true, QTABLE_STRING_TYPE, 20);
     AddColumn(tableId, 3, 'COMMENT', true, QTABLE_STRING_TYPE, 30); 
