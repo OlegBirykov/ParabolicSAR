@@ -258,7 +258,7 @@ function deleteProfit(orderNumber, logComment)
         sDataString = sDataString .. key .. ' = ' .. val .. '; ';
     end
     if (logComment ~= nil) then
-        sDataString = logComment .. sDataString;
+        sDataString = logComment .. ' ' .. sDataString;
     end
     writeToLogFile(sDataString);
 end
@@ -292,7 +292,7 @@ function newStopProfit(buySell, quantity, stopPrice, offset, spread, logComment)
         sDataString = sDataString .. key .. ' = ' .. val .. '; ';
     end
     if (logComment ~= nil) then
-        sDataString = logComment .. sDataString;
+        sDataString = logComment .. ' ' .. sDataString;
     end
     writeToLogFile(sDataString);
 
@@ -341,7 +341,7 @@ function correctPos(needPos, logComment)
         sDataString = sDataString .. key .. ' = ' .. val .. '; ';
     end
     if (logComment ~= nil) then
-        sDataString = logComment .. sDataString;
+        sDataString = logComment .. ' ' .. sDataString;
     end
     writeToLogFile(sDataString);
 
