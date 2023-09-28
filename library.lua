@@ -63,7 +63,7 @@ function body()
     -- найти текущую позицию по инструменту
     nowPos = getNowPos();
 
-    -- если переворот или закрытие позиции, убрать прежние профиты
+    -- если переворот или закрытие позиции, убрать прежние тейк-профиты
     if (nowPos == 0 or sign(nowPos) ~= sign(prevPos)) then
         -- здесь и далее такая конструкция автоматически положит програаму, если функция вернёт nil
         transCount = transCount + deleteAllProfits('Remove take profit');
@@ -94,7 +94,7 @@ function body()
         transCount = transCount + correctPos(0, 'Mode "Only short", close long position');
     end
 
-    -- проверить правильность профита
+    -- проверить и при необходимости скорректировать тейк-профит
     if (transCount == 0) then
         transCount = transCount + profitControl();
     end
@@ -105,6 +105,7 @@ function body()
     -- запомнить текущую позицию
     prevPos = nowPos;
 
+    -- если были транзакции, следующий вызов цикла через 3с, иначе через 0,5c
     if (transCount ~= 0) then
         sleep(3000);
     else
@@ -243,12 +244,12 @@ end
 ----------------------------------------------------------------------------------
 function deleteProfit(orderNumber, logComment)
     transaction = {
-        ['ACTION'] = 'KILL_STOP_ORDER',
-        ['SECCODE'] = emit,
-        ['CLASSCODE'] = class,
-        ['TRANS_ID'] = '123456',
-        ['STOP_ORDER_KEY'] = intToStr(orderNumber),
-        ['CLIENT_CODE'] = 'ROBOT'
+        ['ACTION'] = 'KILL_STOP_ORDER',             -- снятие стоп-заявки
+        ['SECCODE'] = emit,                         -- код инструмента
+        ['CLASSCODE'] = class,                      -- код класса рынка (срочный)
+        ['TRANS_ID'] = '123456',                    -- id заявки
+        ['STOP_ORDER_KEY'] = intToStr(orderNumber), -- номер снимаемой стоп-заявки
+        ['CLIENT_CODE'] = 'ROBOT'                   -- комментарий, отображаемый в таблице стоп-заявок
     };
 
     local result = sendTransaction(transaction);
@@ -264,29 +265,32 @@ function deleteProfit(orderNumber, logComment)
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+---------------------------- Выставление тейк-профита ----------------------------
 ----------------------------------------------------------------------------------
 function newStopProfit(buySell, quantity, stopPrice, offset, spread, logComment)
+    -- задать параметры транзакции
     transaction = {
-        ['ACTION'] = 'NEW_STOP_ORDER',
-        ['STOP_ORDER_KIND'] = 'TAKE_PROFIT_STOP_ORDER',
-        ['SECCODE'] = emit,
-        ['ACCOUNT'] = account,
-        ['CLASSCODE'] = class,
-        ['OPERATION'] = buySell,
-        ['QUANTITY'] = intToStr(math.abs(quantity)),
-        ['STOPPRICE'] = intToStr(stopPrice),
-        ['OFFSET_UNITS'] = 'PRICE_UNITS',
-        ['SPREAD_UNITS'] = 'PRICE_UNITS',
-        ['OFFSET'] = intToStr(offset),
-        ['SPREAD'] = intToStr(spread),
-        ['EXPIRY_DATE'] = 'GTC',  -- до отмены
-        ['TRANS_ID'] = '123456',
-        ['CLIENT_CODE'] = 'ROBOT'
+        ['ACTION'] = 'NEW_STOP_ORDER',                  -- новая стоп-заявка
+        ['STOP_ORDER_KIND'] = 'TAKE_PROFIT_STOP_ORDER', -- тип заявки - тейк-профит
+        ['SECCODE'] = emit,                             -- код инструмента
+        ['ACCOUNT'] = account,                          -- счёт клиента
+        ['CLASSCODE'] = class,                          -- код класса рынка (срочный)
+        ['OPERATION'] = buySell,                        -- направление операции (покупка/продажа)
+        ['QUANTITY'] = intToStr(math.abs(quantity)),    -- количество лотов
+        ['STOPPRICE'] = intToStr(stopPrice),            -- стоп-цена за лот
+        ['OFFSET_UNITS'] = 'PRICE_UNITS',               -- шаг отступа равен шагу цены
+        ['SPREAD_UNITS'] = 'PRICE_UNITS',               -- шаг защитного спреда равен шагу цены
+        ['OFFSET'] = intToStr(offset),                  -- величина отступа от максимума/минимума для срабатывания тейк-профита
+        ['SPREAD'] = intToStr(spread),                  -- величина защитного спреда заявки, выставляемой при срабатывании тейк-профита
+        ['EXPIRY_DATE'] = 'TODAY',                      -- до окончания торговой сессии (до отмены могут быть проблемы)
+        ['TRANS_ID'] = '123456',                        -- id заявки
+        ['CLIENT_CODE'] = 'ROBOT'                       -- комментарий, отображаемый в таблице стоп-заявок
     };
 
+    -- отправить транзакцию
     local result = sendTransaction(transaction);
 
+    -- записать ответ в журнал
     local sDataString = 'Transaction response = ' .. result;
     for key, val in pairs(transaction) do
         sDataString = sDataString .. key .. ' = ' .. val .. '; ';
@@ -300,42 +304,51 @@ function newStopProfit(buySell, quantity, stopPrice, offset, spread, logComment)
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+--------------------- Корректировка позиции (подача заявки) ----------------------
 ----------------------------------------------------------------------------------
 function correctPos(needPos, logComment) 
+    -- вычислить разность между требуемой и текущей позицией (объём заявки) 
     local vol = needPos - nowPos;
     if (vol == 0) then
         return 0;
     end
 
-    local buySell = '';
+    -- флаг "покупка/продажа"
+    local buySell = ''; 
+    -- цена заявки
     local price = 0;
+    -- цена последней сделки в таблице текущих торгов
     local last = tonumber(getParamEx(class, emit, 'LAST').param_value);
+    -- шаг цены, также берётся из таблицы текущих торгов 
     local step = tonumber(getParamEx(class, emit, 'SEC_PRICE_STEP').param_value);
 
+    -- на срочном рынке рыночная цена программно не выставляется, требуется лимитная заявка
     if (vol > 0) then 
-        buySell = 'B';
-        price = last + slip * step;
+        buySell = 'B';  -- покупка
+        price = last + slip * step; -- по цене выше последней сделки на значение защитного спреда
     else
-        buySell = 'S';
-        price = last - slip * step;
+        buySell = 'S';  -- продажа
+        price = last - slip * step; -- по цене ниже последней сделки на значение защитного спреда
     end
 
+    -- задать параметры транзакции
     transaction = {
-        ['ACTION'] = 'NEW_ORDER',
-        ['SECCODE'] = emit,
-        ['ACCOUNT'] = account,
-        ['CLASSCODE'] = class,
-        ['OPERATION'] = buySell,
-        ['PRICE'] = intToStr(price),
-        ['QUANTITY'] = intToStr(math.abs(vol)),
-        ['TYPE'] = 'L',
-        ['TRANS_ID'] = '123456',
-        ['CLIENT_CODE'] = 'ROBOT'
+        ['ACTION'] = 'NEW_ORDER',               -- новая заявка
+        ['SECCODE'] = emit,                     -- код инструмента         
+        ['ACCOUNT'] = account,                  -- счёт клиента
+        ['CLASSCODE'] = class,                  -- код класса рынка (срочный)
+        ['OPERATION'] = buySell,                -- направление операции (покупка/продажа)
+        ['PRICE'] = intToStr(price),            -- цена за лот
+        ['QUANTITY'] = intToStr(math.abs(vol)), -- количество лотов
+        ['TYPE'] = 'L',                         -- лимитная заявка
+        ['TRANS_ID'] = '123456',                -- id заявки
+        ['CLIENT_CODE'] = 'ROBOT'               -- комментарий, отображаемый в таблице заявок
     };
 
+    -- отправить транзакцию
     local result = sendTransaction(transaction);
 
+    -- записать ответ в журнал
     local sDataString = 'Transaction response = ' .. result .. '; Pos = ' .. tostring(nowPos) .. '; ';
     for key, val in pairs(transaction) do
         sDataString = sDataString .. key .. ' = ' .. val .. '; ';
@@ -345,10 +358,12 @@ function correctPos(needPos, logComment)
     end
     writeToLogFile(sDataString);
 
+    -- каждые 0.1 cек проверять текущую позицию
     local count = 1;
     for i = 1, 300 do
         sleep(100);
         local newPos = getNowPos();
+        -- если текущая позиция стала равна требуемой, сделать запись в журнале об успешном выполнении сделки
         if (newPos == needPos) then
             err = 'Trade completed in ' .. tostring(count * 100) .. 'ms';
             writeToLogFile(err);
@@ -357,15 +372,17 @@ function correctPos(needPos, logComment)
         count = count + 1;
     end
 
+    -- если в течение 30 сек сделка не была выполнена, сделать запись об ошибке
     err = 'Transaction error';
     writeToLogFile(err);
     return nil;
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+-------------------------- Проверка сигнала к торговле ---------------------------
 ----------------------------------------------------------------------------------
 function signalCheck()
+    -- получить количество свечей на графиках индикатора Parabolic SAR и курса фьючерса
     local numOfCandlesSAR = getNumCandles(sarId);
     local numOfCandlesPrice = getNumCandles(priceId);
     if (numOfCandlesSAR == nil or numOfCandlesPrice == nil) then
@@ -373,6 +390,7 @@ function signalCheck()
         return 0;
     end
 
+    -- получить последние две свечи для каждого из графиков
     local tSAR, nSAR, _ = getCandlesByIndex(sarId, 0, numOfCandlesSAR - 2, 2);
     local tPrice, nPrice, _ = getCandlesByIndex(priceId, 0, numOfCandlesPrice - 2, 2);
     if (nSAR ~= 2 or nPrice ~= 2) then
@@ -380,38 +398,43 @@ function signalCheck()
         return 0;
     end
 
+    -- работаем по уровням закрытия свечи цены, для SAR уровни закрытия и открытия, по идее, одинаковы
     if (tSAR[0].close > tPrice[0].close and tSAR[1].close < tPrice[1].close) then
-        return 2; -- сигнал к открытию длинной позиции
+        return 2; -- переход цены выше SAR - сигнал к открытию длинной позиции
     elseif (tSAR[0].close < tPrice[0].close and tSAR[1].close > tPrice[1].close) then
-        return -2; -- сигнал к открытию короткой позиции
+        return -2; -- переход цены ниже SAR - сигнал к открытию короткой позиции
     elseif (tSAR[1].close < tPrice[1].close) then
-        return 1; -- сейчас длинная или нулевая позиция
+        return 1; -- цена выше SAR - сейчас длинная или нулевая позиция
     elseif (tSAR[1].close > tPrice[1].close) then
-        return -1; -- сейчас короткая или нулевая позиция
+        return -1; -- цена ниже SAR - сейчас короткая или нулевая позиция
     end
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+-------------------- Получение текущей позиции по инструменту --------------------
 ----------------------------------------------------------------------------------
 function getNowPos()
+    -- количество записей в таблице "Позиции по клиентским счетам (фьючерсы)"
     local nSize = getNumberOf('futures_client_holding');
     if (nSize == nil) then
         return 0;
     end
 
+    -- просмотр таблицы
     for i = 0, nSize - 1 do
         local row = getItem('futures_client_holding', i);
+        -- если в строке совпадает инструмент и торговый счёт, вернуть текущую чистую позицию (кол-во фьючерсов на счёте)
         if (row ~= nil and row.sec_code == emit and row.trdaccid == account) then
             return tonumber(row.totalnet);
         end
     end
 
+    -- иначе вернуть 0
     return 0;
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+-------------------------- Инициализация строк таблицы ---------------------------
 ----------------------------------------------------------------------------------
 function putDataToTableInit()
     Clear(tableId);
@@ -446,7 +469,7 @@ function putDataToTableInit()
 end
 
 ----------------------------------------------------------------------------------
----------------------
+---------------------- Вывод в таблицу сообщения об ошибке -----------------------
 ----------------------------------------------------------------------------------
 function putDataToTableTimer()
     SetCell(tableId, 1, 3, err);
@@ -454,7 +477,7 @@ function putDataToTableTimer()
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+----------------------- Вывод в таблицу текущей информации -----------------------
 ----------------------------------------------------------------------------------
 function putDataToTable(signal)
     SetCell(tableId, 2, 2, tostring(emit));
