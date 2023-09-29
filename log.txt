@@ -21,3 +21,6 @@
 29.09.2023 10:39:39 - Program started
 29.09.2023 10:41:09 - Program started
 29.09.2023 10:44:25 - Program started
+29.09.2023 10:49:00 - Program started
+29.09.2023 11:06:12 - Open/reverse position by signal Transaction response = ; Pos = 0; PRICE = 97285; ACCOUNT = A728crz; ACTION = NEW_ORDER; CLIENT_CODE = ROBOT; TRANS_ID = 123456; TYPE = L; CLASSCODE = SPBFUT; OPERATION = S; QUANTITY = 1; SECCODE = SiZ3; 
+29.09.2023 11:06:12 - Trade completed in 200ms

@@ -203,7 +203,7 @@ function getEntryPrice()
 
             local price = row.price;
             local quantity = row.qty;
-            local prev = pos - direct * quantiy;
+            local prev = pos - direct * quantity;
 
             if (sign(prev) ~= sign(pos)) then
                 sum = sum + direct * sign(nowPos) * price * math.min(quantity, math.abs(pos));
