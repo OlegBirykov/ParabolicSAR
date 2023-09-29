@@ -114,42 +114,70 @@ function body()
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+------------------ Вычисление параметров/коррекция тейк-профита ------------------
 ----------------------------------------------------------------------------------
 function profitControl()
+    -- получить массив индексов строк в таблице стоп-заявок для заданного счёта и инструмента
     local function fn1(param1, param2) 
         return param1 == account and param2 == emit;
     end
-
     local rows = SearchItems('stop_orders', 0, getNumberOf('stop_orders') - 1, fn1, 'account, sec_code');  
+
+    -- шаг цены, берётся из таблицы текущих торгов 
     local step = tonumber(getParamEx(class, emit, 'SEC_PRICE_STEP').param_value);
+
+    -- средняя цена лота последней сделки
     local entryPrice = roundForStep(getEntryPrice(), step);
+
+    -- цена тейк-профита
     local profitPrice = entryPrice + sign(nowPos) * profit * step;
-    local profitCorrect = false;  -- нашли или нет нужный профит
+
+    -- по умолчанию тейк-профит не существует/не откорретирован
+    local profitCorrect = false;
+
+    --счётчик транзакций
     local count = 0;
 
+    -- если в таблице стоп-заявок обнаружены строки для заданного счёта и инструмента
     if (rows ~= nil) then
+        -- цикл по массиву индексов обнаруженных строк
         for i = 1, #rows do
+            -- получить строку таблицы
             local row = getItem('stop_orders', rows[i]);
-            local flag = bit.band(row.flags, 0x1);  -- флаг активной заявки
+
+            -- если стоп-заявка активна
+            local flag = bit.band(row.flags, 0x1);
             if (flag ~= 0) then
-                if (row.stop_order_type ~= 6 or profitCorrect) then -- 6 - тейк-профит
-                    deleteProfit(row.orderNumber);
+                -- если тип стоп-заявки не "тейк-профит" или тейк-профит уже откорректирован
+                if (row.stop_order_type ~= 6 or profitCorrect) then
+                    -- удалить данную запись из таблицы стоп-заявок, это мусор от каких-то сбоев или левых команд пользователя
+                    deleteProfit(row.order_num);
                     count = count + 1;
+                -- если это неоткорректированный тейк-профит
                 else
+                    -- количество лотов
                     local quantityX = row.qty;
+                    -- стоп-цена
                     local profitPriceX = row.condition_price;
+
                     local signPosX = 0;
+                    -- срабатывание тейк-профита при понижении цены (покупка)
                     if (row.condition == 4) then
                         signPosX = -1;
+                    -- срабатывание тейк-профита при повышении цены (продажа)
                     elseif (row.condition == 5) then
                         signPosX = 1;
                     end
 
+                    -- если направление тейк-профита соответствует знаку позиции,
+                    -- количество лотов заявки равно количеству лотов позиции
+                    -- и стоп-цена заявки равна расчётной,
+                    -- то заявка корректна
                     if (signPosX == sign(nowPos) and quantityX == math.abs(nowPos) and profitPriceX == profitPrice) then
                         profitCorrect = true;
+                    -- иначе удалить заявку
                     else
-                        deleteProfit(row.orderNumber);
+                        deleteProfit(row.order_num);
                         count = count + 1;    
                     end
                 end
@@ -157,17 +185,23 @@ function profitControl()
         end
     end
 
+    -- если тейк-профит не существует/не откорректирован и текущая позиция не нулевая 
     if (not profitCorrect and nowPos ~= 0) then
+        -- задать отступ от максимума/минимума цены для срабатывания тейк-профита 
         local profitOffset = offset * step;
+        -- задать защитный спред при выставлении лимитной заявки
         local profitSpread = spread * step;
-        local buySell = '';
 
+        local buySell = '';
+        -- продажа при срабатывании
         if (nowPos > 0) then
-            buySell = 'S';
+            buySell = 'S'; 
+        -- покупка при срабаьывании
         else
             buySell = 'B';
         end
 
+        -- выставить новый тейк-профит с заданными параметрами
         newStopProfit(buySell, math.abs(nowPos), profitPrice, profitOffset, profitSpread, 'Create stop order');
         count = count + 1;
     end
@@ -176,43 +210,59 @@ function profitControl()
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+------------- Определение реальной цены, по которой произошла сделка -------------
 ----------------------------------------------------------------------------------
 function getEntryPrice()
+    -- если позиция нулевая, тейк-профит ставить не надо - соответственно, цену вычислять не требуется
     if (nowPos == 0) then
         return 0;
     end
 
+    -- получить массив индексов строк в таблице сделок для заданного счёта и инструмента
     local function fn1(param1, param2) 
         return param1 == account and param2 == emit;
     end
- 
     local rows = SearchItems('trades', 0, getNumberOf('trades') - 1, fn1, 'account, sec_code');  
+
     local pos = nowPos;
     local sum = 0;
 
+    -- если в таблице сделок обнаружены строки с заданными параметрами 
     if (rows ~= nil) then
+        -- цикл по массиву индексов обнаруженных строк, начиная с последней сделки
         for i = #rows, 1, -1 do
+            -- получить строку таблицы
             local row = getItem('trades', rows[i]);
-            local direct;
 
+            -- определить направление сделки
+            local direct;
             if (bit.band(row.flags, 0x4) ~= 0) then
                 direct = -1;    -- продажа
             else
                 direct = 1;     -- покупка
             end
 
+            -- определить позицию, бывшую до текущей записи из перечисляемых в цикле
             local price = row.price;
             local quantity = row.qty;
             local prev = pos - direct * quantity;
 
+            -- если знак позиции изменился, перебраны все записи последней сделки
             if (sign(prev) ~= sign(pos)) then
+                -- добавить цену текущей записи к общей сумме сделки
+                -- с учётом того, что при реверсе позиции часть лотов может относиться 
+                -- к гашению предыдущего отклонения от нулевой позиции
                 sum = sum + direct * sign(nowPos) * price * math.min(quantity, math.abs(pos));
+                -- вернуть среднюю цену лота сделки
                 return sum / math.abs(nowPos);
+            -- если знак позиции не изменился, сделка состоит из нескольких частей 
+            -- (возможно при позиции более одного лота),
+            -- и сумма текущей записи точно добавляется к общей сумме сделки
             else
                 sum = sum + direct * sign(nowPos) * price * quantity;
             end
 
+            -- сделать предыдущую позицию текущей
             pos = prev;
         end
     end 
