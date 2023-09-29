@@ -130,7 +130,7 @@ function profitControl()
 
     if (rows ~= nil) then
         for i = 1, #rows do
-            local row = getItem('stop_orders', i);
+            local row = getItem('stop_orders', rows[i]);
             local flag = bit.band(row.flags, 0x1);  -- флаг активной заявки
             if (flag ~= 0) then
                 if (row.stop_order_type ~= 6 or profitCorrect) then -- 6 - тейк-профит
@@ -185,14 +185,14 @@ function getEntryPrice()
     local function fn1(param1, param2) 
         return param1 == account and param2 == emit;
     end
-
+ 
     local rows = SearchItems('trades', 0, getNumberOf('trades') - 1, fn1, 'account, sec_code');  
     local pos = nowPos;
     local sum = 0;
 
     if (rows ~= nil) then
         for i = #rows, 1, -1 do
-            local row = getItem('trades', i);
+            local row = getItem('trades', rows[i]);
             local direct;
 
             if (bit.band(row.flags, 0x4) ~= 0) then
@@ -220,7 +220,7 @@ function getEntryPrice()
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+--------------- Удаление всех активных стоп-заявок (тейк-профитов) ---------------
 ----------------------------------------------------------------------------------
 function deleteAllProfits(logComment)
     local n = getNumberOf('stop_orders');
@@ -240,9 +240,10 @@ function deleteAllProfits(logComment)
 end
 
 ----------------------------------------------------------------------------------
-----------------------------------
+----------------------------- Удаление тейк-профита ------------------------------
 ----------------------------------------------------------------------------------
 function deleteProfit(orderNumber, logComment)
+    -- задать параметры транзакции
     transaction = {
         ['ACTION'] = 'KILL_STOP_ORDER',             -- снятие стоп-заявки
         ['SECCODE'] = emit,                         -- код инструмента
@@ -252,8 +253,10 @@ function deleteProfit(orderNumber, logComment)
         ['CLIENT_CODE'] = 'ROBOT'                   -- комментарий, отображаемый в таблице стоп-заявок
     };
 
+    -- отправить транзакцию
     local result = sendTransaction(transaction);
 
+    -- записать ответ в журнал
     local sDataString = 'Transaction response = ' .. result;
     for key, val in pairs(transaction) do
         sDataString = sDataString .. key .. ' = ' .. val .. '; ';
