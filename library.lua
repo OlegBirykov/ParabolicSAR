@@ -158,7 +158,8 @@ function profitControl()
     end
 
     if (not profitCorrect and nowPos ~= 0) then
-        local profitSpread = 30 * step;
+        local profitOffset = offset * step;
+        local profitSpread = spread * step;
         local buySell = '';
 
         if (nowPos > 0) then
@@ -167,7 +168,7 @@ function profitControl()
             buySell = 'B';
         end
 
-        newStopProfit(buySell, math.abs(nowPos), profitPrice, 0, profitSpread, 'Create stop order');
+        newStopProfit(buySell, math.abs(nowPos), profitPrice, profitOffset, profitSpread, 'Create stop order');
         count = count + 1;
     end
 
@@ -270,7 +271,7 @@ end
 ----------------------------------------------------------------------------------
 ---------------------------- Выставление тейк-профита ----------------------------
 ----------------------------------------------------------------------------------
-function newStopProfit(buySell, quantity, stopPrice, offset, spread, logComment)
+function newStopProfit(buySell, quantity, stopPrice, stopOffset, stopSpread, logComment)
     -- задать параметры транзакции
     transaction = {
         ['ACTION'] = 'NEW_STOP_ORDER',                  -- новая стоп-заявка
@@ -283,8 +284,8 @@ function newStopProfit(buySell, quantity, stopPrice, offset, spread, logComment)
         ['STOPPRICE'] = intToStr(stopPrice),            -- стоп-цена за лот
         ['OFFSET_UNITS'] = 'PRICE_UNITS',               -- шаг отступа равен шагу цены
         ['SPREAD_UNITS'] = 'PRICE_UNITS',               -- шаг защитного спреда равен шагу цены
-        ['OFFSET'] = intToStr(offset),                  -- величина отступа от максимума/минимума для срабатывания тейк-профита
-        ['SPREAD'] = intToStr(spread),                  -- величина защитного спреда заявки, выставляемой при срабатывании тейк-профита
+        ['OFFSET'] = intToStr(stopOffset),              -- величина отступа от максимума/минимума для срабатывания тейк-профита
+        ['SPREAD'] = intToStr(stopSpread),              -- величина защитного спреда заявки, выставляемой при срабатывании тейк-профита
         ['EXPIRY_DATE'] = 'TODAY',                      -- до окончания торговой сессии (до отмены могут быть проблемы)
         ['TRANS_ID'] = '123456',                        -- id заявки
         ['CLIENT_CODE'] = 'ROBOT'                       -- комментарий, отображаемый в таблице стоп-заявок
@@ -328,10 +329,10 @@ function correctPos(needPos, logComment)
     -- на срочном рынке рыночная цена программно не выставляется, требуется лимитная заявка
     if (vol > 0) then 
         buySell = 'B';  -- покупка
-        price = last + slip * step; -- по цене выше последней сделки на значение защитного спреда
+        price = last + spread * step; -- по цене выше последней сделки на значение защитного спреда
     else
         buySell = 'S';  -- продажа
-        price = last - slip * step; -- по цене ниже последней сделки на значение защитного спреда
+        price = last - spread * step; -- по цене ниже последней сделки на значение защитного спреда
     end
 
     -- задать параметры транзакции
