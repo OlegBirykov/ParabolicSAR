@@ -186,6 +186,7 @@ function profitControl()
     end
 
     -- если тейк-профит не существует/не откорректирован и текущая позиция не нулевая 
+    nowPos = getNowPos();
     if (not profitCorrect and nowPos ~= 0) then
         -- задать отступ от максимума/минимума цены для срабатывания тейк-профита 
         local profitOffset = offset * step;
