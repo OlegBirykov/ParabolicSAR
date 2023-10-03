@@ -129,8 +129,9 @@ function profitControl()
     -- средняя цена лота последней сделки
     local entryPrice = roundForStep(getEntryPrice(), step);
 
-    -- цена тейк-профита
+    -- цена тейк-профита и стоп-лимита
     local profitPrice = entryPrice + sign(nowPos) * profit * step;
+    local stopPrice = entryPrice - sign(nowPos) * stop * step;
 
     -- по умолчанию тейк-профит не существует/не откорретирован
     local profitCorrect = false;
@@ -148,8 +149,8 @@ function profitControl()
             -- если стоп-заявка активна
             local flag = bit.band(row.flags, 0x1);
             if (flag ~= 0) then
-                -- если тип стоп-заявки не "тейк-профит" или тейк-профит уже откорректирован
-                if (row.stop_order_type ~= 6 or profitCorrect) then
+                -- если тип стоп-заявки не "тейк-профит и стоп-лимит" или тейк-профит уже откорректирован
+                if (row.stop_order_type ~= 9 or profitCorrect) then
                     -- удалить данную запись из таблицы стоп-заявок, это мусор от каких-то сбоев или левых команд пользователя
                     deleteProfit(row.order_num);
                     count = count + 1;
@@ -192,18 +193,20 @@ function profitControl()
         local profitOffset = offset * step;
         -- задать защитный спред при выставлении лимитной заявки
         local profitSpread = spread * step;
+        -- задать цену заявки при срабатывании стоп-лимита
+        local stopOrderPrice = stopPrice - sign(nowPos) * spread * step;
 
         local buySell = '';
         -- продажа при срабатывании
         if (nowPos > 0) then
             buySell = 'S'; 
-        -- покупка при срабаьывании
+        -- покупка при срабатывании
         else
             buySell = 'B';
         end
 
         -- выставить новый тейк-профит с заданными параметрами
-        newStopProfit(buySell, math.abs(nowPos), profitPrice, profitOffset, profitSpread, 'Create stop order');
+        newStopProfit(buySell, math.abs(nowPos), profitPrice, profitOffset, profitSpread, stopPrice, stopOrderPrice, 'Create stop order');
         count = count + 1;
     end
 
@@ -322,21 +325,23 @@ end
 ----------------------------------------------------------------------------------
 ---------------------------- Выставление тейк-профита ----------------------------
 ----------------------------------------------------------------------------------
-function newStopProfit(buySell, quantity, stopPrice, stopOffset, stopSpread, logComment)
+function newStopProfit(buySell, quantity, profitPrice, profitOffset, profitSpread, stopPrice, stopOrderPrice, logComment)
     -- задать параметры транзакции
     transaction = {
         ['ACTION'] = 'NEW_STOP_ORDER',                  -- новая стоп-заявка
-        ['STOP_ORDER_KIND'] = 'TAKE_PROFIT_STOP_ORDER', -- тип заявки - тейк-профит
+        ['STOP_ORDER_KIND'] = 'TAKE_PROFIT_AND_STOP_LIMIT_ORDER',   -- тип заявки - тейк-профит и стоп-лимит
         ['SECCODE'] = emit,                             -- код инструмента
         ['ACCOUNT'] = account,                          -- счёт клиента
         ['CLASSCODE'] = class,                          -- код класса рынка (срочный)
         ['OPERATION'] = buySell,                        -- направление операции (покупка/продажа)
         ['QUANTITY'] = intToStr(math.abs(quantity)),    -- количество лотов
-        ['STOPPRICE'] = intToStr(stopPrice),            -- стоп-цена за лот
+        ['STOPPRICE'] = intToStr(profitPrice),          -- стоп-цена 1 (тейк-профит) за лот
         ['OFFSET_UNITS'] = 'PRICE_UNITS',               -- шаг отступа равен шагу цены
         ['SPREAD_UNITS'] = 'PRICE_UNITS',               -- шаг защитного спреда равен шагу цены
-        ['OFFSET'] = intToStr(stopOffset),              -- величина отступа от максимума/минимума для срабатывания тейк-профита
-        ['SPREAD'] = intToStr(stopSpread),              -- величина защитного спреда заявки, выставляемой при срабатывании тейк-профита
+        ['OFFSET'] = intToStr(profitOffset),            -- величина отступа от максимума/минимума для срабатывания тейк-профита
+        ['SPREAD'] = intToStr(profitSpread),            -- величина защитного спреда заявки, выставляемой при срабатывании тейк-профита
+        ['STOPPRICE2'] = intToStr(stopPrice),           -- стоп-цена 2 (стоп-лимит)
+        ['PRICE'] = intToStr(stopOrderPrice),           -- цена лимитной заявки при срабатывании стоп-лимита    
         ['EXPIRY_DATE'] = 'TODAY',                      -- до окончания торговой сессии (до отмены могут быть проблемы)
         ['TRANS_ID'] = '123456',                        -- id заявки
         ['CLIENT_CODE'] = 'ROBOT'                       -- комментарий, отображаемый в таблице стоп-заявок
