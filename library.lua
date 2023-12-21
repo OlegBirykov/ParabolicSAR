@@ -63,14 +63,19 @@ function body()
     -- найти текущую позицию по инструменту
     nowPos = getNowPos();
 
+    -- если позиция закрыта, обнулить опорный уровень
+    if (nowPos == 0) then
+        referenceLevel = 0;
+    end
+
     -- если переворот или закрытие позиции, убрать прежние тейк-профиты
     if (nowPos == 0 or sign(nowPos) ~= sign(prevPos)) then
-        -- здесь и далее такая конструкция автоматически положит програаму, если функция вернёт nil
+        -- здесь и далее такая конструкция автоматически положит программу, если функция вернёт nil
         transCount = transCount + deleteAllProfits('Remove take profit');
     end
 
     -- проверить наличие сигнала с графика
-    local signal = signalCheck();
+    local signal, price = signalCheck();
 
     -- скорректировать сигнал с учётом "Только лонг" или "Только шорт"
     if (tradeType == 'LONG') then
@@ -92,9 +97,31 @@ function body()
     -- принудительное закрытие лонга в режиме "Только шорт"
     elseif (tradeType == 'SHORT' and nowPos > 0) then
         transCount = transCount + correctPos(0, 'Mode "Only short", close long position');
+
+    -- если установлен опорный уровень, проверить ручные стоп-сигналы
+    elseif (referenceLevel ~= 0) then
+        -- позиция лонг
+        if (nowPos > 0) then
+            -- стоп-лосс
+            if (price < referenceLevel - quickStop) then
+                transCount = transCount + correctPos(0, 'Quik close long position');
+            -- частичный тейк-профит
+            elseif (nowPos > risk and price > referenceLevel + quickProfit) then
+                transCount = transCount + correctPos(risk, 'Quik profit long position');
+            end
+        -- позиция шорт
+        elseif (nowPos < 0) then
+            -- стоп-лосс
+            if (price > referenceLevel + quickStop) then
+                transCount = transCount + correctPos(0, 'Quik close short position');
+            -- частичный тейк-профит
+            elseif (math.abs(nowPos) > risk and price < referenceLevel - quickProfit) then
+                transCount = transCount + correctPos(- risk, 'Quik profit short position');
+            end
+        end
     end
 
-    -- проверить и при необходимости скорректировать тейк-профит
+    -- проверить и при необходимости скорректировать тейк-профит (эта процедура также выставляет опорный уровень)
     if (transCount == 0) then
         transCount = transCount + profitControl();
     end
@@ -128,6 +155,9 @@ function profitControl()
 
     -- средняя цена лота последней сделки
     local entryPrice = roundForStep(getEntryPrice(), step);
+
+    -- установить опорный уровень для ручных стоп-сигналов
+    referenceLevel = entryPrice;
 
     -- цена тейк-профита и стоп-лимита
     local profitPrice = entryPrice + sign(nowPos) * profit * step;
@@ -475,6 +505,8 @@ function signalCheck()
     elseif (tSAR[1].close > tPrice[1].close) then
         return -1; -- цена ниже SAR - сейчас короткая или нулевая позиция
     end
+
+    return signal, tPrice[1].close;
 end
 
 ----------------------------------------------------------------------------------
@@ -517,6 +549,7 @@ function putDataToTableInit()
     SetCell(tableId, 3, 1, 'Current position');
     SetCell(tableId, 4, 1, 'Signal');
     SetCell(tableId, 5, 1, 'Lot size');
+    SetCell(tableId, 6, 1, 'Reference level');
     SetCell(tableId, 7, 1, 'Client code');
     SetCell(tableId, 8, 1, 'Class code');
     SetCell(tableId, 9, 1, 'Trade type');
@@ -551,6 +584,7 @@ function putDataToTable(signal)
     SetCell(tableId, 3, 2, tostring(nowPos));
     SetCell(tableId, 4, 2, tostring(signal));
     SetCell(tableId, 5, 2, tostring(lot));
+    SetCell(tableId, 6, 2, tostring(referenceLevel));
     SetCell(tableId, 7, 2, account);
     SetCell(tableId, 8, 2, class);
     SetCell(tableId, 9, 2, tradeType);
