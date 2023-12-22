@@ -74,8 +74,8 @@ function body()
         transCount = transCount + deleteAllProfits('Remove take profit');
     end
 
-    -- проверить наличие сигнала с графика
-    local signal, price = signalCheck();
+    -- проверить наличие сигнала с графика (эта процедура также определяет текущую цену)
+    local signal = signalCheck();
 
     -- скорректировать сигнал с учётом "Только лонг" или "Только шорт"
     if (tradeType == 'LONG') then
@@ -99,23 +99,23 @@ function body()
         transCount = transCount + correctPos(0, 'Mode "Only short", close long position');
 
     -- если установлен опорный уровень, проверить ручные стоп-сигналы
-    elseif (referenceLevel ~= 0) then
+    elseif (referenceLevel ~= 0 and nowPrice ~= 0) then
         -- позиция лонг
         if (nowPos > 0) then
             -- стоп-лосс
-            if (price < referenceLevel - quickStop) then
+            if (nowPrice < referenceLevel - quickStop) then
                 transCount = transCount + correctPos(0, 'Quik close long position');
             -- частичный тейк-профит
-            elseif (nowPos > risk and price > referenceLevel + quickProfit) then
+            elseif (nowPos > risk and nowPrice > referenceLevel + quickProfit) then
                 transCount = transCount + correctPos(risk, 'Quik profit long position');
             end
         -- позиция шорт
         elseif (nowPos < 0) then
             -- стоп-лосс
-            if (price > referenceLevel + quickStop) then
+            if (nowPrice > referenceLevel + quickStop) then
                 transCount = transCount + correctPos(0, 'Quik close short position');
             -- частичный тейк-профит
-            elseif (math.abs(nowPos) > risk and price < referenceLevel - quickProfit) then
+            elseif (math.abs(nowPos) > risk and nowPrice < referenceLevel - quickProfit) then
                 transCount = transCount + correctPos(- risk, 'Quik profit short position');
             end
         end
@@ -479,6 +479,9 @@ end
 -------------------------- Проверка сигнала к торговле ---------------------------
 ----------------------------------------------------------------------------------
 function signalCheck()
+    -- текущая цена в случае сбоя
+    nowPrice = 0;
+
     -- получить количество свечей на графиках индикатора Parabolic SAR и курса фьючерса
     local numOfCandlesSAR = getNumCandles(sarId);
     local numOfCandlesPrice = getNumCandles(priceId);
@@ -487,13 +490,16 @@ function signalCheck()
         return 0;
     end
 
-    -- получить последние две свечи для каждого из графиков
-    local tSAR, nSAR, _ = getCandlesByIndex(sarId, 0, numOfCandlesSAR - 2, 2);
-    local tPrice, nPrice, _ = getCandlesByIndex(priceId, 0, numOfCandlesPrice - 2, 2);
+    -- получить предпоследние две свечи для каждого из графиков (последнюю, неоконченную, не учитываем)
+    local tSAR, nSAR, _ = getCandlesByIndex(sarId, 0, numOfCandlesSAR - 3, 2);
+    local tPrice, nPrice, _ = getCandlesByIndex(priceId, 0, numOfCandlesPrice - 3, 2);
     if (nSAR ~= 2 or nPrice ~= 2) then
         err = 'Candle number error';
         return 0;
     end
+
+    -- текущая цена
+    nowPrice = tPrice[1].close;
 
     -- работаем по уровням закрытия свечи цены, для SAR уровни закрытия и открытия, по идее, одинаковы
     if (tSAR[0].close > tPrice[0].close and tSAR[1].close < tPrice[1].close) then
@@ -506,7 +512,7 @@ function signalCheck()
         return -1; -- цена ниже SAR - сейчас короткая или нулевая позиция
     end
 
-    return signal, tPrice[1].close;
+    return 0;
 end
 
 ----------------------------------------------------------------------------------
@@ -549,10 +555,12 @@ function putDataToTableInit()
     SetCell(tableId, 3, 1, 'Current position');
     SetCell(tableId, 4, 1, 'Signal');
     SetCell(tableId, 5, 1, 'Lot size');
-    SetCell(tableId, 6, 1, 'Reference level');
-    SetCell(tableId, 7, 1, 'Client code');
-    SetCell(tableId, 8, 1, 'Class code');
-    SetCell(tableId, 9, 1, 'Trade type');
+    SetCell(tableId, 6, 1, 'Risk lot size');
+    SetCell(tableId, 7, 1, 'Reference level');
+    SetCell(tableId, 8, 1, 'Current price');
+    SetCell(tableId, 9, 1, 'Client code');
+    SetCell(tableId, 10, 1, 'Class code');
+    SetCell(tableId, 11, 1, 'Trade type');
     SetCell(tableId, 13, 1, 'Test');
     SetColor(tableId, 13, 1, RGB(220, 220, 0), RGB(0, 0, 0), RGB(0, 220, 220), RGB(0, 0, 0));
     SetCell(tableId, 13, 3, 'Stop');
@@ -584,10 +592,12 @@ function putDataToTable(signal)
     SetCell(tableId, 3, 2, tostring(nowPos));
     SetCell(tableId, 4, 2, tostring(signal));
     SetCell(tableId, 5, 2, tostring(lot));
-    SetCell(tableId, 6, 2, tostring(referenceLevel));
-    SetCell(tableId, 7, 2, account);
-    SetCell(tableId, 8, 2, class);
-    SetCell(tableId, 9, 2, tradeType);
+    SetCell(tableId, 6, 2, tostring(risk));
+    SetCell(tableId, 7, 2, tostring(referenceLevel));
+    SetCell(tableId, 8, 2, tostring(nowPrice));
+    SetCell(tableId, 9, 2, account);
+    SetCell(tableId, 10, 2, class);
+    SetCell(tableId, 11, 2, tradeType);
 end
 
 ----------------------------------------------------------------------------------
