@@ -74,8 +74,8 @@ function body()
         transCount = transCount + deleteAllProfits('Remove take profit');
     end
 
-    -- проверить наличие сигнала с графика (эта процедура также определяет текущую цену)
-    local signal = signalCheck();
+    -- проверить наличие сигнала с графика и определить текущую цену
+    local signal, price = signalCheck();
 
     -- скорректировать сигнал с учётом "Только лонг" или "Только шорт"
     if (tradeType == 'LONG') then
@@ -88,34 +88,39 @@ function body()
     if (math.abs(signal) == 2) then
         local needPos = sign(signal) * lot;
         transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
+        referenceLevel = getReferenceLevel();
     -- принудительное закрытие позиции, противоречащей текущему состоянию индикатора
     elseif (math.abs(signal) == 1 and sign(signal) ~= sign(nowPos)) then
         transCount = transCount + correctPos(0, 'Incorrect sign of current position, close position');
+        referenceLevel = 0;
     -- принудительное закрытие шорта в режиме "Только лонг"
     elseif (tradeType == 'LONG' and nowPos < 0) then
         transCount = transCount + correctPos(0, 'Mode "Only long", close short position');
+        referenceLevel = 0;
     -- принудительное закрытие лонга в режиме "Только шорт"
     elseif (tradeType == 'SHORT' and nowPos > 0) then
         transCount = transCount + correctPos(0, 'Mode "Only short", close long position');
-
+        referenceLevel = 0;
     -- если установлен опорный уровень, проверить ручные стоп-сигналы
-    elseif (referenceLevel ~= 0 and nowPrice ~= 0) then
+    elseif (referenceLevel ~= 0 and price ~= 0) then
         -- позиция лонг
         if (nowPos > 0) then
             -- стоп-лосс
-            if (nowPrice < referenceLevel - quickStop) then
+            if (price < referenceLevel - quickStop) then
                 transCount = transCount + correctPos(0, 'Quik close long position');
+                referenceLevel = 0;
             -- частичный тейк-профит
-            elseif (nowPos > risk and nowPrice > referenceLevel + quickProfit) then
+            elseif (nowPos > risk and price > referenceLevel + quickProfit) then
                 transCount = transCount + correctPos(risk, 'Quik profit long position');
             end
         -- позиция шорт
         elseif (nowPos < 0) then
             -- стоп-лосс
-            if (nowPrice > referenceLevel + quickStop) then
+            if (price > referenceLevel + quickStop) then
                 transCount = transCount + correctPos(0, 'Quik close short position');
+                referenceLevel = 0;
             -- частичный тейк-профит
-            elseif (math.abs(nowPos) > risk and nowPrice < referenceLevel - quickProfit) then
+            elseif (math.abs(nowPos) > risk and price < referenceLevel - quickProfit) then
                 transCount = transCount + correctPos(- risk, 'Quik profit short position');
             end
         end
@@ -127,7 +132,7 @@ function body()
     end
 
     -- записать текущие данные в таблицу робота
-    putDataToTable(signal);
+    putDataToTable(signal, price);
 
     -- запомнить текущую позицию
     prevPos = nowPos;
@@ -155,9 +160,6 @@ function profitControl()
 
     -- средняя цена лота последней сделки
     local entryPrice = roundForStep(getEntryPrice(), step);
-
-    -- установить опорный уровень для ручных стоп-сигналов
-    referenceLevel = entryPrice;
 
     -- цена тейк-профита и стоп-лимита
     local profitPrice = entryPrice + sign(nowPos) * profit * step;
@@ -401,6 +403,16 @@ function newStopProfit(buySell, quantity, profitPrice, profitOffset, profitSprea
 end
 
 ----------------------------------------------------------------------------------
+-------------- Определение опорного уровня для ручных стоп-сигналов --------------
+----------------------------------------------------------------------------------
+function getReferenceLevel() 
+    -- шаг цены, берётся из таблицы текущих торгов 
+    local step = tonumber(getParamEx(class, emit, 'SEC_PRICE_STEP').param_value);
+    -- средняя цена лота последней сделки
+    return roundForStep(getEntryPrice(), step);
+end
+
+----------------------------------------------------------------------------------
 --------------------- Корректировка позиции (подача заявки) ----------------------
 ----------------------------------------------------------------------------------
 function correctPos(needPos, logComment) 
@@ -479,15 +491,12 @@ end
 -------------------------- Проверка сигнала к торговле ---------------------------
 ----------------------------------------------------------------------------------
 function signalCheck()
-    -- текущая цена в случае сбоя
-    nowPrice = 0;
-
     -- получить количество свечей на графиках индикатора Parabolic SAR и курса фьючерса
     local numOfCandlesSAR = getNumCandles(sarId);
     local numOfCandlesPrice = getNumCandles(priceId);
     if (numOfCandlesSAR == nil or numOfCandlesPrice == nil) then
         err = 'No output from chart';
-        return 0;
+        return 0, 0;
     end
 
     -- получить предпоследние две свечи для каждого из графиков (последнюю, неоконченную, не учитываем)
@@ -495,24 +504,23 @@ function signalCheck()
     local tPrice, nPrice, _ = getCandlesByIndex(priceId, 0, numOfCandlesPrice - 3, 2);
     if (nSAR ~= 2 or nPrice ~= 2) then
         err = 'Candle number error';
-        return 0;
+        return 0, 0;
     end
 
-    -- текущая цена
-    nowPrice = tPrice[1].close;
+    local signal = 0;
 
     -- работаем по уровням закрытия свечи цены, для SAR уровни закрытия и открытия, по идее, одинаковы
     if (tSAR[0].close > tPrice[0].close and tSAR[1].close < tPrice[1].close) then
-        return 2; -- переход цены выше SAR - сигнал к открытию длинной позиции
+        signal = 2; -- переход цены выше SAR - сигнал к открытию длинной позиции
     elseif (tSAR[0].close < tPrice[0].close and tSAR[1].close > tPrice[1].close) then
-        return -2; -- переход цены ниже SAR - сигнал к открытию короткой позиции
+        signal = -2; -- переход цены ниже SAR - сигнал к открытию короткой позиции
     elseif (tSAR[1].close < tPrice[1].close) then
-        return 1; -- цена выше SAR - сейчас длинная или нулевая позиция
+        signal = 1; -- цена выше SAR - сейчас длинная или нулевая позиция
     elseif (tSAR[1].close > tPrice[1].close) then
-        return -1; -- цена ниже SAR - сейчас короткая или нулевая позиция
+        signal = -1; -- цена ниже SAR - сейчас короткая или нулевая позиция
     end
 
-    return 0;
+    return  signal, tPrice[1].close;
 end
 
 ----------------------------------------------------------------------------------
@@ -587,14 +595,14 @@ end
 ----------------------------------------------------------------------------------
 ----------------------- Вывод в таблицу текущей информации -----------------------
 ----------------------------------------------------------------------------------
-function putDataToTable(signal)
+function putDataToTable(signal, price)
     SetCell(tableId, 2, 2, tostring(emit));
     SetCell(tableId, 3, 2, tostring(nowPos));
     SetCell(tableId, 4, 2, tostring(signal));
     SetCell(tableId, 5, 2, tostring(lot));
     SetCell(tableId, 6, 2, tostring(risk));
     SetCell(tableId, 7, 2, tostring(referenceLevel));
-    SetCell(tableId, 8, 2, tostring(nowPrice));
+    SetCell(tableId, 8, 2, tostring(price));
     SetCell(tableId, 9, 2, account);
     SetCell(tableId, 10, 2, class);
     SetCell(tableId, 11, 2, tradeType);
