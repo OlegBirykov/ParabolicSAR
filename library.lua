@@ -112,6 +112,9 @@ function body()
             -- частичный тейк-профит
             elseif (nowPos > risk and price > referenceLevel + quickProfit) then
                 transCount = transCount + correctPos(risk, 'Quik profit long position');
+            -- перемещение стоп-лосса в безубыток и далее
+            elseif (price > referenceLevel + 2 * quickStop) then
+                referenceLevel = referenceLevel + quickStop;
             end
         -- позиция шорт
         elseif (nowPos < 0) then
@@ -122,6 +125,9 @@ function body()
             -- частичный тейк-профит
             elseif (math.abs(nowPos) > risk and price < referenceLevel - quickProfit) then
                 transCount = transCount + correctPos(- risk, 'Quik profit short position');
+            -- перемещение стоп-лосса в безубыток и далее
+            elseif (price < referenceLevel - 2 * quickStop) then
+                referenceLevel = referenceLevel - quickStop;
             end
         end
     end
