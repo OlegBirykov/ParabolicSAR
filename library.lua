@@ -89,10 +89,6 @@ function body()
         local needPos = sign(signal) * lot;
         transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
         referenceLevel = getReferenceLevel();
-    -- принудительное закрытие позиции, противоречащей текущему состоянию индикатора
-    elseif (math.abs(signal) == 1 and sign(signal) ~= sign(nowPos)) then
-        transCount = transCount + correctPos(0, 'Incorrect sign of current position, close position');
-        referenceLevel = 0;
     -- принудительное закрытие шорта в режиме "Только лонг"
     elseif (tradeType == 'LONG' and nowPos < 0) then
         transCount = transCount + correctPos(0, 'Mode "Only long", close short position');
@@ -132,7 +128,7 @@ function body()
         end
     end
 
-    -- проверить и при необходимости скорректировать тейк-профит (эта процедура также выставляет опорный уровень)
+    -- проверить и при необходимости скорректировать тейк-профит
     if (transCount == 0) then
         transCount = transCount + profitControl();
     end
@@ -515,15 +511,43 @@ function signalCheck()
 
     local signal = 0;
 
-    -- работаем по уровням закрытия свечи цены, для SAR уровни закрытия и открытия, по идее, одинаковы
-    if (tSAR[0].close > tPrice[0].close and tSAR[1].close < tPrice[1].close) then
-        signal = 2; -- переход цены выше SAR - сигнал к открытию длинной позиции
-    elseif (tSAR[0].close < tPrice[0].close and tSAR[1].close > tPrice[1].close) then
-        signal = -2; -- переход цены ниже SAR - сигнал к открытию короткой позиции
-    elseif (tSAR[1].close < tPrice[1].close) then
-        signal = 1; -- цена выше SAR - сейчас длинная или нулевая позиция
+    -- здесь и далее работаем по уровням закрытия свечи цены, для SAR уровни закрытия и открытия, по идее, одинаковы
+    if (tSAR[1].close < tPrice[1].close) then
+        signal = 1; -- цена выше SAR, зона роста цены
     elseif (tSAR[1].close > tPrice[1].close) then
-        signal = -1; -- цена ниже SAR - сейчас короткая или нулевая позиция
+        signal = -1; -- цена ниже SAR, зона падения цены
+    end
+
+    -- если нет неподтверждённого сигнала
+    if (triggerSignal == 0) then  
+        -- переход цены выше SAR - неподтверждённый сигнал к открытию длинной позиции
+        if (tSAR[0].close > tPrice[0].close and tSAR[1].close < tPrice[1].close) then
+            triggerLevel = tSAR[0].close + triggerOffset;
+            triggerSignal == 1;
+        -- переход цены ниже SAR - неподтверждённый сигнал к открытию короткой позиции
+        elseif (tSAR[0].close < tPrice[0].close and tSAR[1].close > tPrice[1].close) then
+            triggerLevel = tSAR[0].close - triggerOffset;
+            triggerSignal == -1;
+        end
+    end
+
+    -- если был неподтверждённый сигнал от SAR
+    if (triggerSignal ~= 0) then
+        -- переход цены выше SAR сбрасывает предыдущий сигнал на открытие короткой позиции
+        if (tSAR[0].close > tPrice[0].close and tSAR[1].close < tPrice[1].close and triggerSignal < 0) then
+            triggerSignal = 0;
+        -- переход цены ниже SAR сбрасывает предыдущий сигнал на открытие длинной позиции
+        elseif (tSAR[0].close < tPrice[0].close and tSAR[1].close > tPrice[1].close and triggerSignal > 0) then
+            triggerSignal = 0;
+        -- подтверждение сигнала на открытие длинной позиции
+        elseif (triggerSignal > 0 and tPrice[1].close > triggerLevel) then
+            signal = 2;
+            triggerSignal = 0;
+        -- подтверждение сигнала на открытие короткой позиции
+        elseif (triggerSignal < 0 and tPrice[1].close < triggerLevel) then
+            signal = -2;
+            triggerSignal = 0;
+        end
     end
 
     return  signal, tPrice[1].close;
