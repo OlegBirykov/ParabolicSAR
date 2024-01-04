@@ -77,26 +77,11 @@ function body()
     -- проверить наличие сигнала с графика и определить текущую цену
     local signal, price = signalCheck();
 
-    -- скорректировать сигнал с учётом "Только лонг" или "Только шорт"
-    if (tradeType == 'LONG') then
-        signal = math.max(signal, 0);
-    elseif (tradeType == 'SHORT') then 
-        signal = math.min(signal, 0);
-    end
-
     -- если сигнал лонг или шорт, то купить или продать
     if (math.abs(signal) == 2) then
         local needPos = sign(signal) * lot;
         transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
         referenceLevel = getReferenceLevel();
-    -- принудительное закрытие шорта в режиме "Только лонг"
-    elseif (tradeType == 'LONG' and nowPos < 0) then
-        transCount = transCount + correctPos(0, 'Mode "Only long", close short position');
-        referenceLevel = 0;
-    -- принудительное закрытие лонга в режиме "Только шорт"
-    elseif (tradeType == 'SHORT' and nowPos > 0) then
-        transCount = transCount + correctPos(0, 'Mode "Only short", close long position');
-        referenceLevel = 0;
     -- если установлен опорный уровень, проверить ручные стоп-сигналы
     elseif (referenceLevel ~= 0 and price ~= 0) then
         -- позиция лонг
@@ -523,11 +508,11 @@ function signalCheck()
         -- переход цены выше SAR - неподтверждённый сигнал к открытию длинной позиции
         if (tSAR[0].close > tPrice[0].close and tSAR[1].close < tPrice[1].close) then
             triggerLevel = tSAR[0].close + triggerOffset;
-            triggerSignal == 1;
+            triggerSignal = 1;
         -- переход цены ниже SAR - неподтверждённый сигнал к открытию короткой позиции
         elseif (tSAR[0].close < tPrice[0].close and tSAR[1].close > tPrice[1].close) then
             triggerLevel = tSAR[0].close - triggerOffset;
-            triggerSignal == -1;
+            triggerSignal = -1;
         end
     end
 
@@ -598,7 +583,8 @@ function putDataToTableInit()
     SetCell(tableId, 8, 1, 'Current price');
     SetCell(tableId, 9, 1, 'Client code');
     SetCell(tableId, 10, 1, 'Class code');
-    SetCell(tableId, 11, 1, 'Trade type');
+    SetCell(tableId, 11, 1, 'Trigger level');
+    SetCell(tableId, 12, 1, 'Trigger state');
     SetCell(tableId, 13, 1, 'Test');
     SetColor(tableId, 13, 1, RGB(220, 220, 0), RGB(0, 0, 0), RGB(0, 220, 220), RGB(0, 0, 0));
     SetCell(tableId, 13, 3, 'Stop');
@@ -635,7 +621,8 @@ function putDataToTable(signal, price)
     SetCell(tableId, 8, 2, tostring(price));
     SetCell(tableId, 9, 2, account);
     SetCell(tableId, 10, 2, class);
-    SetCell(tableId, 11, 2, tradeType);
+    SetCell(tableId, 11, 2, tostring(triggerLevel));
+    SetCell(tableId, 12, 2, tostring(triggerSignal));
 end
 
 ----------------------------------------------------------------------------------
