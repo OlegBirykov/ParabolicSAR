@@ -95,7 +95,7 @@ function body()
             elseif (nowPos > risk and price > referenceLevel + quickProfit) then
                 transCount = transCount + correctPos(risk, 'Quik profit long position');
             -- перемещение стоп-лосса в безубыток и далее
-            elseif (price > referenceLevel + 2 * quickStop) then
+            elseif (price > referenceLevel + correctOffset) then
                 referenceLevel = referenceLevel + quickStop;
             end
         -- позиция шорт
@@ -108,7 +108,7 @@ function body()
             elseif (math.abs(nowPos) > risk and price < referenceLevel - quickProfit) then
                 transCount = transCount + correctPos(- risk, 'Quik profit short position');
             -- перемещение стоп-лосса в безубыток и далее
-            elseif (price < referenceLevel - 2 * quickStop) then
+            elseif (price < referenceLevel - correctOffset) then
                 referenceLevel = referenceLevel - quickStop;
             end
         end
