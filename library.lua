@@ -81,7 +81,6 @@ function body()
     if (math.abs(signal) == 2) then
         local needPos = sign(signal) * lot;
         transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
-        nowPos = getNowPos();
         referenceLevel = getReferenceLevel();
     -- если установлен опорный уровень, проверить ручные стоп-сигналы
     elseif (referenceLevel ~= 0 and price ~= 0) then
@@ -396,8 +395,8 @@ end
 function getReferenceLevel() 
     -- шаг цены, берётся из таблицы текущих торгов 
     local step = tonumber(getParamEx(class, emit, 'SEC_PRICE_STEP').param_value);
-    -- средняя цена лота последней сделки
-    return roundForStep(getEntryPrice(), step);
+    -- уровень пересечения линии SAR
+    return roundForStep(triggerLevel, step);
 end
 
 ----------------------------------------------------------------------------------
