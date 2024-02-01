@@ -80,7 +80,11 @@ function body()
     -- если сигнал лонг или шорт, то купить или продать
     if (math.abs(signal) == 2) then
         local needPos = sign(signal) * lot;
-        transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
+        -- если от прошлого сигнала в ту же сторону осталась хотя бы частично незакрытая позиция, 
+        -- доводить её до полного объёма не надо
+        if (sign(needPos) ~= sign(nowPos)) then
+            transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
+        end
         referenceLevel = getReferenceLevel();
     -- если установлен опорный уровень, проверить ручные стоп-сигналы
     elseif (referenceLevel ~= 0 and price ~= 0) then
