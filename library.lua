@@ -63,11 +63,6 @@ function body()
     -- найти текущую позицию по инструменту
     nowPos = getNowPos();
 
-    -- если позиция закрыта, обнулить опорный уровень
-    if (nowPos == 0) then
-        referenceLevel = 0;
-    end
-
     -- если переворот или закрытие позиции, убрать прежние тейк-профиты
     if (nowPos == 0 or sign(nowPos) ~= sign(prevPos)) then
         -- здесь и далее такая конструкция автоматически положит программу, если функция вернёт nil
@@ -75,46 +70,12 @@ function body()
     end
 
     -- проверить наличие сигнала с графика и определить текущую цену
-    local signal, price = signalCheck();
+    local signal = signalCheck();
 
     -- если сигнал лонг или шорт, то купить или продать
     if (math.abs(signal) == 2) then
         local needPos = sign(signal) * lot;
-        -- если от прошлого сигнала в ту же сторону осталась хотя бы частично незакрытая позиция, 
-        -- доводить её до полного объёма не надо
-        if (sign(needPos) ~= sign(nowPos)) then
-            transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
-        end
-        referenceLevel = getReferenceLevel();
-    -- если установлен опорный уровень, проверить ручные стоп-сигналы
-    elseif (referenceLevel ~= 0 and price ~= 0) then
-        -- позиция лонг
-        if (nowPos > 0) then
-            -- стоп-лосс
-            if (price < referenceLevel - quickStop) then
-                transCount = transCount + correctPos(0, 'Quik close long position');
-                referenceLevel = 0;
-            -- частичный тейк-профит
-            elseif (nowPos > risk and price > referenceLevel + quickProfit) then
-                transCount = transCount + correctPos(risk, 'Quik profit long position');
-            -- перемещение стоп-лосса в безубыток и далее
-            elseif (price > referenceLevel + correctOffset) then
-                referenceLevel = referenceLevel + quickStop;
-            end
-        -- позиция шорт
-        elseif (nowPos < 0) then
-            -- стоп-лосс
-            if (price > referenceLevel + quickStop) then
-                transCount = transCount + correctPos(0, 'Quik close short position');
-                referenceLevel = 0;
-            -- частичный тейк-профит
-            elseif (math.abs(nowPos) > risk and price < referenceLevel - quickProfit) then
-                transCount = transCount + correctPos(- risk, 'Quik profit short position');
-            -- перемещение стоп-лосса в безубыток и далее
-            elseif (price < referenceLevel - correctOffset) then
-                referenceLevel = referenceLevel - quickStop;
-            end
-        end
+        transCount = transCount + correctPos(needPos, 'Open/reverse position by signal');
     end
 
     -- проверить и при необходимости скорректировать тейк-профит
@@ -123,7 +84,7 @@ function body()
     end
 
     -- записать текущие данные в таблицу робота
-    putDataToTable(signal, price);
+    putDataToTable(signal);
 
     -- запомнить текущую позицию
     prevPos = nowPos;
@@ -394,16 +355,6 @@ function newStopProfit(buySell, quantity, profitPrice, profitOffset, profitSprea
 end
 
 ----------------------------------------------------------------------------------
--------------- Определение опорного уровня для ручных стоп-сигналов --------------
-----------------------------------------------------------------------------------
-function getReferenceLevel() 
-    -- шаг цены, берётся из таблицы текущих торгов 
-    local step = tonumber(getParamEx(class, emit, 'SEC_PRICE_STEP').param_value);
-    -- уровень пересечения линии SAR
-    return roundForStep(triggerLevel, step);
-end
-
-----------------------------------------------------------------------------------
 --------------------- Корректировка позиции (подача заявки) ----------------------
 ----------------------------------------------------------------------------------
 function correctPos(needPos, logComment) 
@@ -487,15 +438,15 @@ function signalCheck()
     local numOfCandlesPrice = getNumCandles(priceId);
     if (numOfCandlesSAR == nil or numOfCandlesPrice == nil) then
         err = 'No output from chart';
-        return 0, 0;
+        return 0;
     end
 
-    -- получить предпоследние две свечи для каждого из графиков (последнюю, неоконченную, не учитываем)
-    local tSAR, nSAR, _ = getCandlesByIndex(sarId, 0, numOfCandlesSAR - 3, 2);
-    local tPrice, nPrice, _ = getCandlesByIndex(priceId, 0, numOfCandlesPrice - 3, 2);
+    -- получить последние две свечи для каждого из графиков
+    local tSAR, nSAR, _ = getCandlesByIndex(sarId, 0, numOfCandlesSAR - 2, 2);
+    local tPrice, nPrice, _ = getCandlesByIndex(priceId, 0, numOfCandlesPrice - 2, 2);
     if (nSAR ~= 2 or nPrice ~= 2) then
         err = 'Candle number error';
-        return 0, 0;
+        return 0;
     end
 
     local signal = 0;
@@ -539,7 +490,7 @@ function signalCheck()
         end
     end
 
-    return  signal, tPrice[1].close;
+    return  signal;
 end
 
 ----------------------------------------------------------------------------------
@@ -582,9 +533,6 @@ function putDataToTableInit()
     SetCell(tableId, 3, 1, 'Current position');
     SetCell(tableId, 4, 1, 'Signal');
     SetCell(tableId, 5, 1, 'Lot size');
-    SetCell(tableId, 6, 1, 'Risk lot size');
-    SetCell(tableId, 7, 1, 'Reference level');
-    SetCell(tableId, 8, 1, 'Current price');
     SetCell(tableId, 9, 1, 'Client code');
     SetCell(tableId, 10, 1, 'Class code');
     SetCell(tableId, 11, 1, 'Trigger level');
@@ -620,9 +568,6 @@ function putDataToTable(signal, price)
     SetCell(tableId, 3, 2, tostring(nowPos));
     SetCell(tableId, 4, 2, tostring(signal));
     SetCell(tableId, 5, 2, tostring(lot));
-    SetCell(tableId, 6, 2, tostring(risk));
-    SetCell(tableId, 7, 2, tostring(referenceLevel));
-    SetCell(tableId, 8, 2, tostring(price));
     SetCell(tableId, 9, 2, account);
     SetCell(tableId, 10, 2, class);
     SetCell(tableId, 11, 2, tostring(triggerLevel));
