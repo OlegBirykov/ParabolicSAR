@@ -45,7 +45,7 @@ function OnInit()
     CreateWindow(tableId);    
     putDataToTableInit();
     
-    message('Program "Parabolic SAR 1.0" started', 1);
+    message('Program "Parabolic SAR 1.1" started', 1);
     writeToLogFile('Program started');
 end
 
