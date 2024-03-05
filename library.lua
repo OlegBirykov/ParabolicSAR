@@ -360,6 +360,13 @@ end
 function correctPos(needPos, logComment) 
     -- вычислить разность между требуемой и текущей позицией (объём заявки) 
     local vol = needPos - nowPos;
+    -- если разность нулевая, делать точно ничего не надо
+    if (vol == 0) then
+        return 0;
+    end
+
+    -- если что-то надо делать, вычислить разность с учётом ограничения по числу сделок
+    vol = needPos * sign(dealCounter) - nowPos;
     if (vol == 0) then
         return 0;
     end
@@ -414,8 +421,15 @@ function correctPos(needPos, logComment)
     for i = 1, 300 do
         sleep(100);
         local newPos = getNowPos();
-        -- если текущая позиция стала равна требуемой, сделать запись в журнале об успешном выполнении сделки
-        if (newPos == needPos) then
+        -- если текущая позиция стала равна требуемой
+        if (newPos == needPos * sign(dealCounter)) then
+            -- ограничение по числу сделок
+            if (dealCounter > 0) then
+                dealCounter = dealCounter - 1;
+            else
+                dealCounter = 0;
+            end
+            -- сделать запись в журнале об успешном выполнении сделки
             err = 'Trade completed in ' .. tostring(count * 100) .. 'ms';
             writeToLogFile(err);
             return 1;
@@ -533,6 +547,7 @@ function putDataToTableInit()
     SetCell(tableId, 3, 1, 'Current position');
     SetCell(tableId, 4, 1, 'Signal');
     SetCell(tableId, 5, 1, 'Lot size');
+    SetCell(tableId, 6, 1, 'Deal counter');
     SetCell(tableId, 9, 1, 'Client code');
     SetCell(tableId, 10, 1, 'Class code');
     SetCell(tableId, 11, 1, 'Trigger level');
@@ -568,6 +583,7 @@ function putDataToTable(signal, price)
     SetCell(tableId, 3, 2, tostring(nowPos));
     SetCell(tableId, 4, 2, tostring(signal));
     SetCell(tableId, 5, 2, tostring(lot));
+    SetCell(tableId, 6, 2, tostring(dealCounter));
     SetCell(tableId, 9, 2, account);
     SetCell(tableId, 10, 2, class);
     SetCell(tableId, 11, 2, tostring(triggerLevel));
