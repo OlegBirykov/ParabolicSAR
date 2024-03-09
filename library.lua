@@ -35,16 +35,29 @@ function body()
     end    
 
     -- обработчик событий таблицы
-    local onTableEvent = function(tableId, msg, row, col)
+    local onTableEvent = function(tableId, msg, par1, par2)
         -- двойной щелчок левой кнопкой мыши
         if (msg == QTABLE_LBUTTONDBLCLK) then
             -- ячейка строка 13 столбец 1 - вывести тестовое сообщение
-            if (row == 13 and col == 1) then
+            if (par1 == 13 and par2 == 1) then
                 message('Test message');
             end
             -- ячейка строка 13 столбец 3 - остановить робота
-            if (row == 13 and col == 3) then
+            if (par1 == 13 and par2 == 3) then
                 isRun = false;
+            end
+        end
+        -- ввод символа с клавиатуры
+        if (msg == QTABLE_CHAR) then
+            -- фокус ввода на строке 6
+            if (par1 == 6) then
+                -- для клавиши-цифры значение цифры равно коду клавиши минус код клавиши '0'
+                local digit = par2 - 48;
+                -- если это действительно цифра
+                if (digit >= 0 and digit <= 9) then
+                    -- присвоить её значение счётчику оставшихся сделок
+                    dealCounter = digit;
+                end
             end
         end
     end
