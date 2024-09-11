@@ -76,6 +76,11 @@ function body()
     -- найти текущую позицию по инструменту
     nowPos = getNowPos();
 
+    -- после закрытия сделки сбросить фазу стоп-заявки (на случай последующего ручного открытия)
+    if (nowPos == 0) then
+        phase = 1;
+    end
+
     -- если переворот или закрытие позиции, убрать прежние тейк-профиты
     if (nowPos == 0 or sign(nowPos) ~= sign(prevPos)) then
         -- здесь и далее такая конструкция автоматически положит программу, если функция вернёт nil
@@ -126,9 +131,27 @@ function profitControl()
     -- средняя цена лота последней сделки
     local entryPrice = roundForStep(getEntryPrice(), step);
 
+    -- текущая цена
+    local numOfCandlesPrice = getNumCandles(priceId);
+    if (numOfCandlesPrice == nil) then
+        err = 'No output from chart';
+        return 0;
+    end
+    local tPrice, nPrice, _ = getCandlesByIndex(priceId, 0, numOfCandlesPrice - 1, 1);
+    if (nPrice ~= 1) then
+        err = 'Candle number error';
+        return 0;
+    end
+    local currentPrice = tPrice[0].close;
+
+    -- если пройден уровень фазового перехода, перейти к фазе 2
+    if (math.abs(currentPrice - entryPrice) > phaseLevel) then
+        phase = 2;
+    end
+
     -- цена тейк-профита и стоп-лимита
-    local profitPrice = entryPrice + sign(nowPos) * profit * step;
-    local stopPrice = entryPrice - sign(nowPos) * stop * step;
+    local profitPrice = entryPrice + sign(nowPos) * profit[phase] * step;
+    local stopPrice = entryPrice - sign(nowPos) * stop[phase] * step;
 
     -- по умолчанию тейк-профит не существует/не откорретирован
     local profitCorrect = false;
@@ -194,7 +217,7 @@ function profitControl()
         end
 
         -- задать отступ от максимума/минимума цены для срабатывания тейк-профита 
-        local profitOffset = offset * step;
+        local profitOffset = offset[phase] * step;
         -- задать защитный спред при выставлении лимитной заявки
         local profitSpread = spread * step;
         -- задать цену заявки при срабатывании стоп-лимита
@@ -445,6 +468,8 @@ function correctPos(needPos, logComment)
             -- сделать запись в журнале об успешном выполнении сделки
             err = 'Trade completed in ' .. tostring(count * 100) .. 'ms';
             writeToLogFile(err);
+            -- первая фаза стоп-заявки
+            phase = 1;
             return 1;
         end
         count = count + 1;
