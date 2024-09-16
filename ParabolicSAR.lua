@@ -13,7 +13,7 @@ nowPos = 0;                                     -- текущая позиция
 prevPos = 0;                                    -- позиция на предыдущем шаге
 
 class = 'SPBFUT';                               -- срочный рынок
-emit = 'SiU4';                                  -- код инструмента
+emit = 'SiZ4';                                  -- код инструмента
 account = 'A728crz';                            -- счёт клиента
 sarId = 'SAR_SI';                               -- id графика Parabolic SAR
 priceId = 'PRICE_SI';                           -- id графика цены
