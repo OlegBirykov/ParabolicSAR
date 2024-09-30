@@ -145,7 +145,7 @@ function profitControl()
     local currentPrice = tPrice[0].close;
 
     -- если пройден уровень фазового перехода, перейти к фазе 2
-    if (math.abs(currentPrice - entryPrice) > phaseLevel) then
+    if ((currentPrice - entryPrice) * sign(nowPos) > phaseLevel) then
         phase = 2;
     end
 
